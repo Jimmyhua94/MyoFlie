@@ -62,7 +62,7 @@ from cflib.crazyflie import Crazyflie  # noqa
 
 logging.basicConfig(level=logging.ERROR)
 
-channel = 80
+channel = 75
 connected = False
 
 class Listener(libmyo.DeviceListener):
@@ -79,7 +79,7 @@ class Listener(libmyo.DeviceListener):
         self.emg = None
         self.last_time = 0
 
-        link_uri = "radio://0/"+ channel +"/2M"
+        link_uri = "radio://0/80/2M"
         self._cf = Crazyflie()
 
         self._cf.connected.add_callback(self._connected)
@@ -88,7 +88,10 @@ class Listener(libmyo.DeviceListener):
         self._cf.connection_lost.add_callback(self._connection_lost)
 
         self._cf.open_link(link_uri)
-
+        
+        self.roll_h = 0
+        self.pitch_h = 0
+        self.yaw_h = 0
         self.holder = 0
         self.lock = 1
 
@@ -125,13 +128,13 @@ class Listener(libmyo.DeviceListener):
         thrust = float(math.asin(max(-1.0, min(1.0, 2.0 * (quat.w * quat.y - quat.z * quat.x)))))
         roll = float(math.atan2(2.0 * (quat.w * quat.z + quat.x * quat.y),1.0 - 2.0 * (quat.y * quat.y + quat.z * quat.z)))
         if self.holder == 0:
-            pitch_h = int((pitch + math.pi)/(math.pi*2.0) * 100)
-            thrust_h = int((thrust + math.pi/2.0)/math.pi * 70000)
-            roll_h = int((roll + math.pi)/(math.pi*2.0) * 100)
+            self.pitch_h = int((pitch + math.pi)/(math.pi*2.0) * 100)
+            self.thrust_h = int((thrust + math.pi/2.0)/math.pi * 70000)
+            self.roll_h = int((roll + math.pi)/(math.pi*2.0) * 100)
             self.holder = 1
-        pitch_w = int((pitch + math.pi)/(math.pi*2.0) * 100) - pitch_h
-        thrust_w = abs(int((thrust + math.pi/2.0)/math.pi * 70000) - thrust_h)
-        roll_w = int((roll + math.pi)/(math.pi*2.0) * 100) - roll_h
+        pitch_w = int((pitch + math.pi)/(math.pi*2.0) * 100) - self.pitch_h
+        thrust_w = abs(int((thrust + math.pi/2.0)/math.pi * 70000) - self.thrust_h)
+        roll_w = int((roll + math.pi)/(math.pi*2.0) * 100) - self.roll_h
 
         print (pitch_w,"          ",roll_w,"          ",thrust_w)
 
@@ -139,7 +142,6 @@ class Listener(libmyo.DeviceListener):
         self._cf.commander.send_setpoint(roll_w, pitch_w, yaw, thrust_w)
 
         self.orientation = quat
-        self.output()
 
     def on_accelerometor_data(self, myo, timestamp, acceleration):
         pass
@@ -222,11 +224,10 @@ def main():
     print("Crazyflies found:")
     for i in available:
         print(i[0])
-        if i[0] == "radio://0/"+ channel +"/2M":
-            le = hub.run(1000, Listener())
-            break
-        else:
-            print("No Crazyflies found, cannot run example")
+    if len(available) > 0:
+        le = hub.run(1000, Listener())
+    else:
+        print("No Crazyflies found, cannot run example")
 
     try:
         while hub.running:
