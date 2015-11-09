@@ -58,6 +58,7 @@ from threading import Thread
 import logging
 sys.path.append("lib")
 import cflib  # noqa
+from cfclient.utils.logconfigreader import LogConfig  # noqa
 from cflib.crazyflie import Crazyflie  # noqa
 
 logging.basicConfig(level=logging.ERROR)
@@ -140,7 +141,7 @@ class Listener(libmyo.DeviceListener):
         roll_w = int((roll + math.pi)/(math.pi*2.0) * 18)
         thrust_w = abs(int((thrust + math.pi/2.0)/math.pi * 70000) - self.thrust_h)
         pitch_w = int((pitch + math.pi)/(math.pi*2.0) * 18)
-        if roll_w >= 0 && roll_w >= roll_h:
+        """if roll_w >= 0 && roll_w >= roll_h:
             roll_w -= roll_h
         elif self.roll_p < 0:
             roll_w -= roll_h
@@ -156,7 +157,7 @@ class Listener(libmyo.DeviceListener):
         
             
         self.roll_p = roll_w
-        self.pitch_p = pitch_w
+        self.pitch_p = pitch_w"""
 
         print (pitch_w,"          ",roll_w,"          ",thrust_w)
 
@@ -213,6 +214,23 @@ class Listener(libmyo.DeviceListener):
         global connected
         self._cf.commander.send_setpoint(0, 0, 0, 0)
         connected = True
+        
+        self._lg_acc = LogConfig(name="Acceleration", period_in_ms=10)
+        self._lg_acc.add_variable("acc.z","float")
+        
+        try:
+            self._cf.log.add_config(self._lg_acc)
+            # This callback will receive the data
+            self._lg_acc.data_received_cb.add_callback(self._acc_log_data)
+            # This callback will be called on errors
+            self._lg_stab.error_cb.add_callback(self._acc_log_error)
+            # Start the logging
+            self._lg_acc.start()
+        except KeyError as e:
+            print("Could not start log configuration,"
+                  "{} not found in TOC".format(str(e)))
+        except AttributeError:
+            print("Could not add Acceleration log config, bad configuration.")
 
     def _connection_failed(self, link_uri,msg):
         global connected
@@ -228,6 +246,12 @@ class Listener(libmyo.DeviceListener):
         global connected
         print("Disconnected from %s" % link_uri)
         connected = False
+
+    def _acc_log_error(self, logconf, msg):
+        print("Error when logging %s: %s" % (logconf.name, msg))
+
+    def _stab_log_data(self, timestamp, data, logconf):
+        print("[%d][%s]: %s" % (timestamp, logconf.name, data))
 
 def main():
     global channel
