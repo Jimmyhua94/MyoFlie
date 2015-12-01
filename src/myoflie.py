@@ -59,6 +59,7 @@ import logging
 sys.path.append("lib")
 import cflib  # noqa
 from cfclient.utils.logconfigreader import LogConfig  # noqa
+from cfclient.ui.widgets.ai import AttitudeIndicator
 from cflib.crazyflie import Crazyflie  # noqa
 
 logging.basicConfig(level=logging.ERROR)
@@ -100,6 +101,13 @@ class Listener(libmyo.DeviceListener):
         self.thrust_h = 0
         self.holder = 0
         self.lock = 1
+        
+        self.quat = libmyo.Quaternion(0,0,0,1)
+        
+        quat_w = 0
+        quat_x = 0
+        quat_y = 0
+        quat_z = 0
 
         print("Connecting to %s" % link_uri)
 
@@ -130,34 +138,15 @@ class Listener(libmyo.DeviceListener):
         self.pose = pose
 
     def on_orientation_data(self, myo, timestamp, quat):
-        roll = float(math.atan2(2.0 * (quat.w * quat.x + quat.y * quat.z),1.0 - 2.0 * (quat.x * quat.x + quat.y * quat.y)))
+        roll_w = int(math.atan2(2.0 * (quat.w * quat.x + quat.y * quat.z),1.0 - 2.0 * (quat.x * quat.x + quat.y * quat.y)) * 100 / math.pi)
         thrust = float(math.asin(max(-1.0, min(1.0, 2.0 * (quat.w * quat.y - quat.z * quat.x)))))
-        pitch = float(math.atan2(2.0 * (quat.w * quat.z + quat.x * quat.y),1.0 - 2.0 * (quat.y * quat.y + quat.z * quat.z)))
         if self.holder == 0:
-            self.roll_h = int((roll + math.pi)/(math.pi*2.0) * 18)
             self.thrust_h = int((thrust + math.pi/2.0)/math.pi * 70000)
-            self.pitch_h = int((pitch + math.pi)/(math.pi*2.0) * 18)
+            self.quat = libmyo.Quaternion(quat.x,quat.y,quat.z,quat.w).conjugate()
             self.holder = 1
-        roll_w = int((roll + math.pi)/(math.pi*2.0) * 18)
+        tempquat = quat * self.quat
+        pitch_w = int(math.atan2(2.0 * (tempquat.w * tempquat.z + tempquat.x * tempquat.y),1.0 - 2.0 * (tempquat.y * tempquat.y + tempquat.z * tempquat.z)) * 100 / math.pi)
         thrust_w = abs(int((thrust + math.pi/2.0)/math.pi * 70000) - self.thrust_h)
-        pitch_w = int((pitch + math.pi)/(math.pi*2.0) * 18)
-        """if roll_w >= 0 && roll_w >= roll_h:
-            roll_w -= roll_h
-        elif self.roll_p < 0:
-            roll_w -= roll_h
-        else:
-            roll_w += roll_h
-            
-        if pitch_w >= 0 && pitch_w >= pitch_h:
-            pitch_w -= pitch_h
-        elif self.pitch_p < 0:
-            pitch_w -= pitch_h
-        else:
-            pitch_w += pitch_h
-        
-            
-        self.roll_p = roll_w
-        self.pitch_p = pitch_w"""
 
         print (pitch_w,"          ",roll_w,"          ",thrust_w)
 
@@ -216,14 +205,16 @@ class Listener(libmyo.DeviceListener):
         connected = True
         
         self._lg_acc = LogConfig(name="Acceleration", period_in_ms=10)
-        self._lg_acc.add_variable("acc.z","float")
+        self._lg_acc.add_variable("acc.zw","float")
+        self._lg_acc.add_variable("altHold.target","float")
+        self._lg_acc.add_variable("stabilizer.thrust","float")
         
         try:
             self._cf.log.add_config(self._lg_acc)
             # This callback will receive the data
             self._lg_acc.data_received_cb.add_callback(self._acc_log_data)
             # This callback will be called on errors
-            self._lg_stab.error_cb.add_callback(self._acc_log_error)
+            self._lg_acc.error_cb.add_callback(self._acc_log_error)
             # Start the logging
             self._lg_acc.start()
         except KeyError as e:
@@ -250,8 +241,13 @@ class Listener(libmyo.DeviceListener):
     def _acc_log_error(self, logconf, msg):
         print("Error when logging %s: %s" % (logconf.name, msg))
 
-    def _stab_log_data(self, timestamp, data, logconf):
-        print("[%d][%s]: %s" % (timestamp, logconf.name, data))
+    def _acc_log_data(self, timestamp, data, logconf):
+        """if(data["acc.zw"] < -0.98):
+            self._cf.commander.send_setpoint(0,0,0,45000)
+            print("[%d][%s]: %s" % (timestamp, logconf.name, data))
+        elif(data["acc.zw"] > 0.5):
+            self._cf.commander.send_setpoint(0,0,0,0)
+            print("[%d][%s]: %s" % (timestamp, logconf.name, data))"""
 
 def main():
     global channel
