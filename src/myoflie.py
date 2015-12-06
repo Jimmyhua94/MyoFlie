@@ -93,21 +93,11 @@ class Listener(libmyo.DeviceListener):
 
         self._cf.open_link(link_uri)
         
-        self.roll_p = 0
-        self.pitch_p = 0
-        
-        self.roll_h = 0
-        self.pitch_h = 0
         self.thrust_h = 0
         self.holder = 0
-        self.lock = 1
+        self.cal = 0
         
         self.quat = libmyo.Quaternion(0,0,0,1)
-        
-        quat_w = 0
-        quat_x = 0
-        quat_y = 0
-        quat_z = 0
 
         print("Connecting to %s" % link_uri)
 
@@ -125,28 +115,32 @@ class Listener(libmyo.DeviceListener):
         if pose == libmyo.Pose.double_tap:
             self.holder = 0
             print("tap")
-        elif pose == libmyo.Pose.fingers_spread:
-            self._cf.commander.send_setpoint(0, 0, 0, 0)	#Unlocks thrust
-            self.lock = 0
-            print("finger")
         elif pose == libmyo.Pose.fist:
+            self.cal = 0
+            print("finger")
+        elif pose == libmyo.Pose.wave_out:
             self._cf.commander.send_setpoint(0, 0, 0, 0)	#Clear packets
             time.sleep(0.1)
-            self.lock = 1
             self._cf.close_link()
             print("fist")
         self.pose = pose
 
     def on_orientation_data(self, myo, timestamp, quat):
-        roll_w = int(math.atan2(2.0 * (quat.w * quat.x + quat.y * quat.z),1.0 - 2.0 * (quat.x * quat.x + quat.y * quat.y)) * 100 / math.pi)
         thrust = float(math.asin(max(-1.0, min(1.0, 2.0 * (quat.w * quat.y - quat.z * quat.x)))))
-        if self.holder == 0:
-            self.thrust_h = int((thrust + math.pi/2.0)/math.pi * 70000)
+        if self.cal == 0:
             self.quat = libmyo.Quaternion(quat.x,quat.y,quat.z,quat.w).conjugate()
+            self.cal = 1
+        if self.holder == 0:
+            self.thrust_h = int((thrust + math.pi/2.0)/math.pi * 120000)
             self.holder = 1
         tempquat = quat * self.quat
+        roll_w = int(math.atan2(2.0 * (quat.w * quat.x + quat.y * quat.z),1.0 - 2.0 * (quat.x * quat.x + quat.y * quat.y)) * 100 / math.pi)
         pitch_w = int(math.atan2(2.0 * (tempquat.w * tempquat.z + tempquat.x * tempquat.y),1.0 - 2.0 * (tempquat.y * tempquat.y + tempquat.z * tempquat.z)) * 100 / math.pi)
-        thrust_w = abs(int((thrust + math.pi/2.0)/math.pi * 70000) - self.thrust_h)
+        thrust_t = abs(int((thrust + math.pi/2.0)/math.pi * 120000) - self.thrust_h)
+        if thrust_t < 60000:
+            thrust_w = thrust_t
+        else:
+            thrust_w = 60000
 
         print (pitch_w,"          ",roll_w,"          ",thrust_w)
 
