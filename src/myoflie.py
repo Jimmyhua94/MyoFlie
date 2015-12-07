@@ -96,6 +96,7 @@ class Listener(libmyo.DeviceListener):
         self.thrust_h = 0
         self.holder = 0
         self.cal = 0
+        self.swap = False
         
         self.quat = libmyo.Quaternion(0,0,0,1)
 
@@ -105,20 +106,18 @@ class Listener(libmyo.DeviceListener):
     def on_connect(self, myo, timestamp, firmware_version):
         myo.vibrate('short')
         myo.vibrate('short')
-        myo.request_rssi()
-        myo.request_battery_level()
-
-    def on_rssi(self, myo, timestamp, rssi):
-        self.rssi = rssi
 
     def on_pose(self, myo, timestamp, pose):
         if pose == libmyo.Pose.double_tap:
+            myo.vibrate('short')
             self.holder = 0
             print("tap")
         elif pose == libmyo.Pose.fist:
+            myo.vibrate('short')
             self.cal = 0
             print("finger")
         elif pose == libmyo.Pose.wave_out:
+            myo.vibrate('short')
             self._cf.commander.send_setpoint(0, 0, 0, 0)	#Clear packets
             time.sleep(0.1)
             self._cf.close_link()
@@ -145,52 +144,10 @@ class Listener(libmyo.DeviceListener):
         print (pitch_w,"          ",roll_w,"          ",thrust_w)
 
         yaw = 0
-        self._cf.commander.send_setpoint(roll_w, pitch_w, yaw, thrust_w)
+        if (!self):
+            self._cf.commander.send_setpoint(roll_w, pitch_w, yaw, thrust_w)
 
         self.orientation = quat
-
-    def on_accelerometor_data(self, myo, timestamp, acceleration):
-        pass
-
-    def on_gyroscope_data(self, myo, timestamp, gyroscope):
-        pass
-
-    def on_emg_data(self, myo, timestamp, emg):
-        self.emg = emg
-
-    def on_unlock(self, myo, timestamp):
-        self.locked = False
-
-    def on_lock(self, myo, timestamp):
-        self.locked = True
-
-    def on_event(self, kind, event):
-        pass
-
-    def on_event_finished(self, kind, event):
-        pass
-
-    def on_pair(self, myo, timestamp, firmware_version):
-        pass
-
-    def on_unpair(self, myo, timestamp):
-        pass
-
-    def on_disconnect(self, myo, timestamp):
-        pass
-
-    def on_arm_sync(self, myo, timestamp, arm, x_direction, rotation,
-                    warmup_state):
-        pass
-
-    def on_arm_unsync(self, myo, timestamp):
-        pass
-
-    def on_battery_level_received(self, myo, timestamp, level):
-        pass
-
-    def on_warmup_completed(self, myo, timestamp, warmup_result):
-        pass
         
     #CrazyFlie
     def _connected(self, link_uri):
@@ -205,11 +162,8 @@ class Listener(libmyo.DeviceListener):
         
         try:
             self._cf.log.add_config(self._lg_acc)
-            # This callback will receive the data
             self._lg_acc.data_received_cb.add_callback(self._acc_log_data)
-            # This callback will be called on errors
             self._lg_acc.error_cb.add_callback(self._acc_log_error)
-            # Start the logging
             self._lg_acc.start()
         except KeyError as e:
             print("Could not start log configuration,"
@@ -236,15 +190,19 @@ class Listener(libmyo.DeviceListener):
         print("Error when logging %s: %s" % (logconf.name, msg))
 
     def _acc_log_data(self, timestamp, data, logconf):
-        """if(data["acc.zw"] < -0.98):
+        if(data["acc.zw"] < -0.98):
             self._cf.commander.send_setpoint(0,0,0,45000)
+            self.swap = True
             print("[%d][%s]: %s" % (timestamp, logconf.name, data))
         elif(data["acc.zw"] > 0.5):
             self._cf.commander.send_setpoint(0,0,0,0)
-            print("[%d][%s]: %s" % (timestamp, logconf.name, data))"""
+            self.swap = False
+            print("[%d][%s]: %s" % (timestamp, logconf.name, data))
 
 def main():
     global channel
+    global connected
+    found = False;
 
     print("Connecting to Myo ... Use CTRL^C to exit.")
     try:
@@ -261,21 +219,27 @@ def main():
     print("Crazyflies found:")
     for i in available:
         print(i[0])
+    for i in available:
         if i[0] == "radio://0/"+ channel +"/2M":
             le = hub.run(1000, Listener())
+            found = True
             break
-        else:
-            print("No Crazyflies found, cannot run example")
-    try:
-        while hub.running:
-            time.sleep(0.25)
-    except KeyboardInterrupt:
-        print("\nQuitting ...")
-    finally:
+    if (!found):
+        print("No Crazyflies with channel" + channel + "found!")
         print("Shutting down hub...")
-        if connected:
-            le._cf.close_link()
         hub.shutdown()
+    else:
+        try:
+            while hub.running:
+                time.sleep(0.25)
+        except KeyboardInterrupt:
+            print("\nQuitting ...")
+        finally:
+            print("Shutting down hub...")
+            if connected:
+                le._cf.close_link()
+                print("Disconncting Crazyflie")
+            hub.shutdown()
 
 if __name__ == '__main__':
     main()
