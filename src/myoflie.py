@@ -69,19 +69,12 @@ connected = False
 
 class Listener(libmyo.DeviceListener):
 
-    interval = 0.05  # Output only 0.05 seconds
-
     def __init__(self):
+        global channel
+        
         super(Listener, self).__init__()
         self.orientation = None
         self.pose = libmyo.Pose.rest
-        self.emg_enabled = False
-        self.locked = False
-        self.rssi = None
-        self.emg = None
-        self.last_time = 0
-        
-        global channel
 
         link_uri = "radio://0/" + channel + "/2M"
         self._cf = Crazyflie()
@@ -92,13 +85,14 @@ class Listener(libmyo.DeviceListener):
         self._cf.connection_lost.add_callback(self._connection_lost)
 
         self._cf.open_link(link_uri)
-        
-        self.thrust_h = 0
+
         self.holder = 0
         self.cal = 0
-        self.swap = False
         
+        self.thrust_h = 0
         self.quat = libmyo.Quaternion(0,0,0,1)
+        
+        self.swap = False
 
         print("Connecting to %s" % link_uri)
 
@@ -118,7 +112,7 @@ class Listener(libmyo.DeviceListener):
             print("fist")
         elif pose == libmyo.Pose.wave_out:  #Disconnect
             myo.vibrate('short')
-            self._cf.commander.send_setpoint(0, 0, 0, 0)	#Clear packets
+            self._cf.commander.send_setpoint(0, 0, 0, 0)
             time.sleep(0.1)
             self._cf.close_link()
             print("wave_out")
@@ -126,24 +120,30 @@ class Listener(libmyo.DeviceListener):
 
     def on_orientation_data(self, myo, timestamp, quat):
         thrust = float(math.asin(max(-1.0, min(1.0, 2.0 * (quat.w * quat.y - quat.z * quat.x)))))
+
         if self.cal == 0:
             self.quat = libmyo.Quaternion(quat.x,quat.y,quat.z,quat.w).conjugate()
             self.cal = 1
+
         if self.holder == 0:
             self.thrust_h = int((thrust + math.pi/2.0)/math.pi * 120000)
             self.holder = 1
-        tempquat = quat * self.quat
-        roll_w = int(math.atan2(2.0 * (quat.w * quat.x + quat.y * quat.z),1.0 - 2.0 * (quat.x * quat.x + quat.y * quat.y)) * 100 / math.pi)*-1
-        pitch_w = int(math.atan2(2.0 * (tempquat.w * tempquat.z + tempquat.x * tempquat.y),1.0 - 2.0 * (tempquat.y * tempquat.y + tempquat.z * tempquat.z)) * 100 / math.pi)*-1
+
         thrust_t = abs(int((thrust + math.pi/2.0)/math.pi * 120000) - self.thrust_h)
         if thrust_t < 60000:
             thrust_w = thrust_t
         else:
             thrust_w = 60000
 
+        roll_w = int(math.atan2(2.0 * (quat.w * quat.x + quat.y * quat.z),1.0 - 2.0 * (quat.x * quat.x + quat.y * quat.y)) * 100 / math.pi)*-1
+
+        tempquat = quat * self.quat
+        pitch_w = int(math.atan2(2.0 * (tempquat.w * tempquat.z + tempquat.x * tempquat.y),1.0 - 2.0 * (tempquat.y * tempquat.y + tempquat.z * tempquat.z)) * 100 / math.pi)*-1
+
         print ("Pitch: ",pitch_w,"          ","Roll: ",roll_w,"          ","Thrust: ",thrust_w)
 
         yaw = 0
+        
         if (self.swap == False):
             self._cf.commander.send_setpoint(roll_w, pitch_w, yaw, thrust_w)
 
@@ -152,13 +152,12 @@ class Listener(libmyo.DeviceListener):
     #CrazyFlie
     def _connected(self, link_uri):
         global connected
+        
         self._cf.commander.send_setpoint(0, 0, 0, 0)
         connected = True
         
         self._lg_acc = LogConfig(name="Acceleration", period_in_ms=10)
         self._lg_acc.add_variable("acc.zw","float")
-        self._lg_acc.add_variable("altHold.target","float")
-        self._lg_acc.add_variable("stabilizer.thrust","float")
         
         try:
             self._cf.log.add_config(self._lg_acc)
@@ -202,6 +201,7 @@ class Listener(libmyo.DeviceListener):
 def main():
     global channel
     global connected
+    
     found = False;
 
     print("Connecting to Myo ... Use CTRL^C to exit.")
