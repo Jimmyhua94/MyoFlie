@@ -64,7 +64,7 @@ from cflib.crazyflie import Crazyflie  # noqa
 
 logging.basicConfig(level=logging.ERROR)
 
-channel = "70"
+channel = "75"
 connected = False
 
 class Listener(libmyo.DeviceListener):
@@ -108,20 +108,20 @@ class Listener(libmyo.DeviceListener):
         myo.vibrate('short')
 
     def on_pose(self, myo, timestamp, pose):
-        if pose == libmyo.Pose.double_tap:
+        if pose == libmyo.Pose.double_tap:  #Throttle
             myo.vibrate('short')
             self.holder = 0
             print("tap")
-        elif pose == libmyo.Pose.fist:
+        elif pose == libmyo.Pose.fist:      #Calibrate roll and pitch
             myo.vibrate('short')
             self.cal = 0
-            print("finger")
-        elif pose == libmyo.Pose.wave_out:
+            print("fist")
+        elif pose == libmyo.Pose.wave_out:  #Disconnect
             myo.vibrate('short')
             self._cf.commander.send_setpoint(0, 0, 0, 0)	#Clear packets
             time.sleep(0.1)
             self._cf.close_link()
-            print("fist")
+            print("wave_out")
         self.pose = pose
 
     def on_orientation_data(self, myo, timestamp, quat):
@@ -133,18 +133,18 @@ class Listener(libmyo.DeviceListener):
             self.thrust_h = int((thrust + math.pi/2.0)/math.pi * 120000)
             self.holder = 1
         tempquat = quat * self.quat
-        roll_w = int(math.atan2(2.0 * (quat.w * quat.x + quat.y * quat.z),1.0 - 2.0 * (quat.x * quat.x + quat.y * quat.y)) * 100 / math.pi)
-        pitch_w = int(math.atan2(2.0 * (tempquat.w * tempquat.z + tempquat.x * tempquat.y),1.0 - 2.0 * (tempquat.y * tempquat.y + tempquat.z * tempquat.z)) * 100 / math.pi)
+        roll_w = int(math.atan2(2.0 * (quat.w * quat.x + quat.y * quat.z),1.0 - 2.0 * (quat.x * quat.x + quat.y * quat.y)) * 100 / math.pi)*-1
+        pitch_w = int(math.atan2(2.0 * (tempquat.w * tempquat.z + tempquat.x * tempquat.y),1.0 - 2.0 * (tempquat.y * tempquat.y + tempquat.z * tempquat.z)) * 100 / math.pi)*-1
         thrust_t = abs(int((thrust + math.pi/2.0)/math.pi * 120000) - self.thrust_h)
         if thrust_t < 60000:
             thrust_w = thrust_t
         else:
             thrust_w = 60000
 
-        print (pitch_w,"          ",roll_w,"          ",thrust_w)
+        print ("Pitch: ",pitch_w,"          ","Roll: ",roll_w,"          ","Thrust: ",thrust_w)
 
         yaw = 0
-        if (!self):
+        if (self.swap == False):
             self._cf.commander.send_setpoint(roll_w, pitch_w, yaw, thrust_w)
 
         self.orientation = quat
@@ -191,13 +191,13 @@ class Listener(libmyo.DeviceListener):
 
     def _acc_log_data(self, timestamp, data, logconf):
         if(data["acc.zw"] < -0.98):
-            self._cf.commander.send_setpoint(0,0,0,45000)
+            self._cf.commander.send_setpoint(0,0,0,40000)
             self.swap = True
-            print("[%d][%s]: %s" % (timestamp, logconf.name, data))
+            print("Acceleration: [%d][%s]: %s" % (timestamp, logconf.name, data))
         elif(data["acc.zw"] > 0.5):
             self._cf.commander.send_setpoint(0,0,0,0)
             self.swap = False
-            print("[%d][%s]: %s" % (timestamp, logconf.name, data))
+            print("Acceleration: [%d][%s]: %s" % (timestamp, logconf.name, data))
 
 def main():
     global channel
@@ -224,7 +224,7 @@ def main():
             le = hub.run(1000, Listener())
             found = True
             break
-    if (!found):
+    if (found == False):
         print("No Crazyflies with channel" + channel + "found!")
         print("Shutting down hub...")
         hub.shutdown()
