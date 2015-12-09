@@ -64,7 +64,7 @@ from cflib.crazyflie import Crazyflie  # noqa
 
 logging.basicConfig(level=logging.ERROR)
 
-channel = "75"
+channel = "70"
 connected = False
 
 class Listener(libmyo.DeviceListener):
@@ -83,7 +83,7 @@ class Listener(libmyo.DeviceListener):
         
         global channel
 
-        link_uri = "radio://0/" + channel + "/2M"
+        self.link_uri = "radio://0/" + channel + "/2M"
         self._cf = Crazyflie()
 
         self._cf.connected.add_callback(self._connected)
@@ -91,7 +91,7 @@ class Listener(libmyo.DeviceListener):
         self._cf.connection_failed.add_callback(self._connection_failed)
         self._cf.connection_lost.add_callback(self._connection_lost)
 
-        self._cf.open_link(link_uri)
+        self._cf.open_link(self.link_uri)
         
         self.thrust_h = 0
         self.holder = 0
@@ -122,6 +122,15 @@ class Listener(libmyo.DeviceListener):
             time.sleep(0.1)
             self._cf.close_link()
             print("wave_out")
+        elif pose == libmyo.Pose.wave_in:  #Connect
+            myo.vibrate('short')
+            self._cf = Crazyflie()
+            self._cf.connected.add_callback(self._connected)
+            self._cf.disconnected.add_callback(self._disconnected)
+            self._cf.connection_failed.add_callback(self._connection_failed)
+            self._cf.connection_lost.add_callback(self._connection_lost)
+            self._cf.open_link(self.link_uri)
+            print("wave_in")
         self.pose = pose
 
     def on_orientation_data(self, myo, timestamp, quat):
@@ -190,8 +199,8 @@ class Listener(libmyo.DeviceListener):
         print("Error when logging %s: %s" % (logconf.name, msg))
 
     def _acc_log_data(self, timestamp, data, logconf):
-        if(data["acc.zw"] < -0.98):
-            self._cf.commander.send_setpoint(0,0,0,40000)
+        if(data["acc.zw"] < -0.85):
+            self._cf.commander.send_setpoint(0,0,0,45000)
             self.swap = True
             print("Acceleration: [%d][%s]: %s" % (timestamp, logconf.name, data))
         elif(data["acc.zw"] > 0.5):
