@@ -83,7 +83,8 @@ class Listener(libmyo.DeviceListener):
         
         global channel
 
-        self.link_uri = "radio://0/" + channel + "/2M"
+        link_uri = "radio://0/" + channel + "/2M"
+        self.link = link_uri
         self._cf = Crazyflie()
 
         self._cf.connected.add_callback(self._connected)
@@ -91,8 +92,8 @@ class Listener(libmyo.DeviceListener):
         self._cf.connection_failed.add_callback(self._connection_failed)
         self._cf.connection_lost.add_callback(self._connection_lost)
 
-        self._cf.open_link(self.link_uri)
-        
+        self._cf.open_link(link_uri)
+
         self.thrust_h = 0
         self.holder = 0
         self.cal = 0
@@ -129,7 +130,7 @@ class Listener(libmyo.DeviceListener):
             self._cf.disconnected.add_callback(self._disconnected)
             self._cf.connection_failed.add_callback(self._connection_failed)
             self._cf.connection_lost.add_callback(self._connection_lost)
-            self._cf.open_link(self.link_uri)
+            self._cf.open_link(self.link)
             print("wave_in")
         self.pose = pose
 
